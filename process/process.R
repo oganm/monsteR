@@ -45,7 +45,7 @@ monsterParse = function(text){
             })
         names(monster$speed) = c('normal','fly','burrow','climb','swim')
 
-        monster$stats = text[grep(pattern = '\\|',text)] [2] %>% str_extract_all('(?<=\\|\\s)[0-9]*') %>% {.[[1]]} %>% as.numeric %>%
+        monster$stats = text[grep(pattern = '\\| STR',text)+2] [2] %>% str_extract_all('(?<=\\|\\s)[0-9]*') %>% {.[[1]]} %>% as.numeric %>%
         {names(.) = c('STR','DEX','CON','INT','WIS','CHA')
         .} %>% as.list
 
