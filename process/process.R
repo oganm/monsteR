@@ -1,6 +1,7 @@
 library(dplyr)
 library(ogbox)
 library(stringr)
+library(assertthat)
 
 system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
 system('mv monsters data-raw/monsters')
@@ -16,21 +17,52 @@ names(monsterText) = monsterText %>% sapply(function(x){
 })
 
 monsterParse = function(text){
-    monster = list()
-    monster$name = text[4]
-    monster$size = str_extract(text[7],'^([^\\s]+)\\s') %>% str_trim()
-    list[monster$type,monster$alignment] = text[7] %>% str_split(pattern = ',') %>%
-    {out = .[[1]]
-    out[1] = str_replace(out[1],'^([^\\s]+)\\s','')
-    out}
-    monster$armor$AC = text[9] %>% str_extract('[0-9]+')
-    monster$armor$armor = text[9] %>% str_extract('(\\s|[A-Za-z])*?(?=\\))')
+    tryCatch({
+        monster = list()
+        monster$text = text
+        monster$name = text[4]
+        monster$size = str_extract(text[7],'^([^\\s]+)\\s') %>% str_trim()
+        list[monster$type,monster$alignment] = text[7] %>% str_split(pattern = ',') %>%
+        {out = .[[1]]
+        out[1] = str_replace(out[1],'^([^\\s]+)\\s','')
+        out}
+        monster$armor$AC = text[grep(pattern = 'Armor Class',text)] %>% str_extract('[0-9]+') %>% as.numeric
+        assert_that(noNA(monster$armor$AC))
 
-    monster$HP$average = text[11] %>% str_extract('[0-9]+')
-    monster$HP$roll = text[11] %>%  str_extract('(?<=\\().*(?=\\))')
 
-    special = c('fly','burrow','climb','swim')
+        monster$armor$armor = text[grep(pattern = 'Armor Class',text)] %>% str_extract('(\\s|[A-Za-z])*?(?=\\))')
 
-    monster$speed$walk =text[13] %>% str_extract()
+        monster$HP$average = text[grep(pattern = 'Hit Points',text)] %>% str_extract('[0-9]+') %>% as.numeric
+        assert_that(noNA(monster$HP$average))
 
+        monster$HP$roll =  text[grep(pattern = 'Hit Points',text)] %>%  str_extract('(?<=\\().*(?=\\))')
+
+        speedStrings = c('\\*','fly','burrow','climb','swim')
+
+        monster$speed =
+            speedStrings %>% lapply(function(x){
+                text[grep(pattern = 'Speed',text)] %>% str_extract(paste0("(?<=",x,'\\s)[0-9]*')) %>% as.numeric
+            })
+        names(monster$speed) = c('normal','fly','burrow','climb','swim')
+
+        monster$stats = text[grep(pattern = '\\|',text)] [2] %>% str_extract_all('(?<=\\|\\s)[0-9]*') %>% {.[[1]]} %>% as.numeric %>%
+        {names(.) = c('STR','DEX','CON','INT','WIS','CHA')
+        .} %>% as.list
+
+        monster$languages = text[grep(pattern = 'Languages',text)] %>% str_replace('\\*\\*Languages\\*\\*\\s','') %>%
+            strsplit(',') %>% {.[[1]]}
+
+
+
+        class(monster) = append(class(monster), 'monster')
+        return(monster)
+    },error = function(e){
+        monster = list()
+        monster$text = text
+        class(monster) = append(class(monster), 'monsterNoParse')
+        return(monster)
+    })
 }
+
+monsters = monsterText %>% lapply(monsterParse)
+monsters[(monsters %>% lapply(class) %>% purrr::map(2)  %>% unlist) %in% 'monsterNoParse']
