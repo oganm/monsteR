@@ -6,6 +6,34 @@ library(assertthat)
 system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
 system('mv monsters data-raw/monsters')
 
+download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json')
+
+sizes = c('Tiny',
+          'Small',
+          'Medium',
+          'Large',
+          'Huge',
+          'Gargantuan')
+
+types=c('aberration',
+        'undead',
+        'ooze',
+        'beast',
+        'plant',
+        'celestial',
+        'construct',
+        'dragon',
+        'elemental',
+        'fey',
+        'fiend',
+        'giant',
+        'humanoid',
+        'monstrosity')
+order = c('chaotic','neutral','lawful','true')
+nice = c('good','neutral','evil')
+other = c('unaligned','any')
+
+
 root = list.files('data-raw/monsters/',full.names = TRUE)
 allFiles = list.files('data-raw/monsters/',full.names = TRUE,recursive = TRUE)
 allFiles = allFiles[!allFiles %in% root & !grepl('index',allFiles)]
@@ -13,8 +41,64 @@ allFiles = allFiles[!allFiles %in% root & !grepl('index',allFiles)]
 monsterText = allFiles %>% lapply(readLines) %>% lapply(paste,collapse='\n')
 # just for quick naming
 names(monsterText) = monsterText %>% sapply(function(x){
-    x %>% str_extract('^(?:[^\n]*\n){3}([^\n]*)') %>% str_extract('(?<=\n).*?$')
+    x %>% str_split('\n') %>% {.[[1]][4]}
+    # x %>% str_extract('^(?:[^\n]*\n){3}([^\n]*)') %>% str_extract('(?<=\n).*?$')
 })
+
+
+
+monsterParse = function(text){
+    tryCatch({
+
+    monster = list()
+    monster$text = text
+    monster$name = text %>% str_split('\n') %>% {.[[1]][4]}
+    print(monster$name)
+    monster$size = text %>%
+        str_extract_all(paste0(regexMerge(sizes),'(?=.*?Armor Class\\*\\*)') %>% regex(dotall=TRUE)) %>%
+        {.[[1]]}
+
+    monster$type = text %>%
+        str_extract_all(paste0(regexMerge(types),'(?=.*?Armor Class\\*\\*)') %>%
+                            regex(dotall=TRUE)) %>%
+                            {.[[1]]}
+
+    monster$subtype = text %>%
+        str_extract_all(paste0(regexMerge(types),'.*?(?=Armor Class\\*\\*)') %>%
+                            regex(dotall=TRUE)) %>%
+                            {.[[1]]} %>% str_extract(paste0(
+                                '(?<=',regexMerge(types),'\\s\\()',
+                                '.*?(?=\\))'
+                            )) %>% str_split(', ',simplify = TRUE) %>% as.character()
+    if(length(monster$subtype)==0){
+        monster$subtype = NULL
+    }
+
+    monster$alignment = text %>% str_extract_all(paste0('(?<=,)',regexMerge(),
+                                                        '(?=.*?Armor Class\\*\\*)') %>%
+                                                     regex(dotall=TRUE)) %>%
+                                                     {.[[1]]}
+
+
+    class(monster) = append(class(monster), 'monster')
+    return(monster)
+    },
+    error = function(e){
+        monster = list()
+        monster$name = text %>% str_split('\n') %>% {.[[1]][4]}
+        monster$text = text
+        class(monster) = append(class(monster), 'monsterNoParse')
+        return(monster)
+    })
+
+}
+
+monsters = monsterText %>% lapply(monsterParse)
+monsters %>% map('subtype')
+monsters[(monsters %>% lapply(class) %>% purrr::map(2)  %>% unlist) %in% 'monsterNoParse']
+
+monsters %>% map('size')
+
 
 monsterParse = function(text){
     tryCatch({
