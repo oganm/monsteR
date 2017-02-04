@@ -10,10 +10,10 @@ root = list.files('data-raw/monsters/',full.names = TRUE)
 allFiles = list.files('data-raw/monsters/',full.names = TRUE,recursive = TRUE)
 allFiles = allFiles[!allFiles %in% root & !grepl('index',allFiles)]
 
-monsterText = allFiles %>% lapply(readLines)
+monsterText = allFiles %>% lapply(readLines) %>% lapply(paste,collapse='\n')
 # just for quick naming
 names(monsterText) = monsterText %>% sapply(function(x){
-    x[4]
+    x %>% str_extract('^(?:[^\n]*\n){3}([^\n]*)') %>% str_extract('(?<=\n).*?$')
 })
 
 monsterParse = function(text){
