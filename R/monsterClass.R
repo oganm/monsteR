@@ -57,12 +57,12 @@ attack = function(monster,attacks = 'all', vocal = FALSE){
 
 
 singleAttack = function(action,vocal = FALSE){
-    attack = roll('1d20',vocal = vocal)
+    attack = diceSyntax::roll('1d20',vocal = vocal)
     attackRoll = attack +  action$attack_bonus
-    damage = roll(action$damage_dice,vocal = vocal) + action$damage_bonus
-    if(attack ==20){
-        damage = damage + roll(action$damage_dice,vocal = vocal)
-    } if(attack ==1){
+    damage = diceSyntax::roll(action$damage_dice,vocal = vocal) + action$damage_bonus
+    if(attack == 20){
+        damage = damage + diceSyntax::roll(action$damage_dice,vocal = vocal)
+    } else if (attack == 1){
         damage = 0
     }
 
