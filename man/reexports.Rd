@@ -2,20 +2,25 @@
 % Please edit documentation in R/import.R
 \docType{import}
 \name{reexports}
-\alias{\%<>\%}
+\alias{reexports}
 \alias{\%>\%}
-\alias{list}
+\alias{reexports}
+\alias{\%<>\%}
 \alias{reexports}
 \alias{roll}
+\alias{reexports}
+\alias{list}
 \title{Objects exported from other packages}
+\keyword{internal}
 \description{
 These objects are imported from other packages. Follow the links
 below to see their documentation.
 
 \describe{
+  \item{diceSyntax}{\code{\link[diceSyntax]{roll}}}
+
   \item{magrittr}{\code{\link[magrittr]{\%>\%}}, \code{\link[magrittr]{\%<>\%}}}
 
-  \item{ogbox}{\code{\link[ogbox]{roll}}, \code{\link[ogbox]{list}}}
+  \item{ogbox}{\code{\link[ogbox]{list}}}
 }}
-\keyword{internal}
 

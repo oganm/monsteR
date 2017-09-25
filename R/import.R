@@ -7,9 +7,13 @@ magrittr::`%>%`
 #' @export
 magrittr::`%<>%`
 
-#' @importFrom ogbox roll
+#' @importFrom diceSyntax roll
 #' @export
-ogbox::roll
+diceSyntax::roll
+
+#' @importFrom wizaRd spells
+#' @export
+wizaRd::spells
 
 
 #' @importFrom ogbox list
