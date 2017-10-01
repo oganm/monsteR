@@ -1,13 +1,44 @@
+# libraries and variables ----------
 library(jsonlite)
 library(dplyr)
 library(purrr)
 library(ogbox)
 library(stringr)
 library(wizaRd)
+library(diceSyntax)
 
-download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json',destfile = "data-raw/monsters.json")
-system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
-system('mv monsters data-raw/monsters')
+sizes = c('Tiny',
+          'Small',
+          'Medium',
+          'Large',
+          'Huge',
+          'Gargantuan')
+
+types=c('aberration',
+        'undead',
+        'ooze',
+        'beast',
+        'plant',
+        'celestial',
+        'construct',
+        'dragon',
+        'elemental',
+        'fey',
+        'fiend',
+        'giant',
+        'humanoid',
+        'monstrosity')
+order = c('chaotic','neutral','lawful','true')
+nice = c('good','neutral','evil')
+other = c('unaligned','any alignment','neutral','any [a-z\\-]* alignment')
+
+speeds = c('burrow','climb','fly','swim')
+
+
+# read files ------------
+# download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json',destfile = "data-raw/monsters.json")
+# system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
+# system('mv monsters data-raw/monsters')
 
 monsters = read_json('data-raw/monsters.json')
 monsters = monsters[-length(monsters)]
@@ -37,6 +68,7 @@ monsters %<>% lapply(function(x){
     if(x$name %in% names(monsterText)){
         out$text = monsterText[[x$name]]
         out$name = x$name
+        inMD = TRUE
     } else{
         newName = absentNames %>% strsplit(split = '\\s|,\\s')%>%
             sapply(function(y){
@@ -46,14 +78,13 @@ monsters %<>% lapply(function(x){
         if(length(newName)==0){
             out$name = x$name
             out$text = NULL
+            inMD = FALSE
         } else{
             out$name = newName
             out$text = monsterText[[newName]]
+            inMD = TRUE
         }
     }
-
-
-    out$name = x$name
     out$size = x$size
     out$type = x$type
     out$subtype = x$subtype
@@ -114,6 +145,52 @@ monsters %<>% lapply(function(x){
     out$legendaryActions= x$legendary_actions
     if(!is.null(out$legendaryActions)){
         names(out$legendaryActions) = x$legendary_actions %>% map_chr('name')
+    }
+
+    # if in MD, overwrite bits of it -------------
+    # some bits of the JSON file is wrong/missing. Get the easily parsed bits from MD file
+
+    if(inMD){
+        text = monsterText[[out$name]]
+        typeSizeText = text %>% str_extract('(?<=-\\n).*(?=.*?Armor Class\\*\\*)' %>% regex(dotall=TRUE))
+
+        out$size = typeSizeText %>%
+            str_extract_all(regexMerge(sizes) %>% regex(dotall=TRUE)) %>%
+            {.[[1]]}
+
+        out$type = typeSizeText %>% str_extract_all(regexMerge(types))%>% {.[[1]]}
+
+        out$subtype = text %>%
+            str_extract_all(paste0(regexMerge(types),'.*?(?=Armor Class\\*\\*)') %>%
+                                regex(dotall=TRUE)) %>%
+                                {.[[1]]} %>% str_extract(paste0(
+                                    '(?<=',regexMerge(types),'\\s\\()',
+                                    '.*?(?=\\))'
+                                )) %>% str_split(', ',simplify = TRUE) %>% as.character()
+        if(length(out$subtype)==0){
+            out$subtype = ''
+        }
+
+        out$alignment = text %>% str_extract_all(paste0('(?<=, )','(',paste0(regexMerge(order),' ',regexMerge(nice)),')|(',
+                                                            regexMerge(other),')',
+                                                            '(?=.*?Armor Class\\*\\*)') %>%
+                                                         regex(dotall=TRUE)) %>%
+                                                         {.[[1]]}
+
+        out$AC = text %>% str_extract_all(paste0("(?<=\\*\\*Armor Class\\*\\*).*(?=\\*\\*Hit Points)") %>% regex(dotall=TRUE)) %>%
+        {.[[1]]} %>% str_extract_all('\\d+') %>% {.[[1]]} %>% as.integer()
+
+        hpText = text %>% str_extract_all(paste0("(?<=\\*\\*Hit Points\\*\\*).*(?=\\*\\*Speed)") %>% regex(dotall=TRUE)) %>% {.[[1]]}
+
+        out$HPdice = hpText %>% str_extract_all('(?<=\\()[0-9]+?d[0-9]+.*(?=\\))') %>% {.[[1]]}
+        out$HP = hpText %>% str_extract_all('\\d+?(?= \\()') %>% {.[[1]]} %>% as.integer()
+    } else{
+        # HP dice is always wrong. fix it regardless
+        parsedDice = out$HPdice %>% diceParser()
+        out$HPdice = paste(out$HPdice,'+',ceiling(out$HP - parsedDice$diceCount*(parsedDice$diceSide/2+.5)))
+        if (out$subtype == ''){
+            out$subtype = NA
+        }
     }
 
 
