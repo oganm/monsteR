@@ -57,6 +57,13 @@ attack = function(monster,attacks = 'all', vocal = FALSE){
 
 
 singleAttack = function(action,vocal = FALSE){
+    if(is.null(action$attack_bonus)){
+        action$attack_bonus = 0
+    }
+    if(is.null(action$damage_bonus)){
+        action$damage_bonus = 0
+    }
+
     attack = diceSyntax::roll('1d20',vocal = vocal)
     attackRoll = attack +  action$attack_bonus
     damage = diceSyntax::roll(action$damage_dice,vocal = vocal) + action$damage_bonus
