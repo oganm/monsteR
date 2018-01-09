@@ -1,0 +1,50 @@
+---
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+devtools::load_all()
+```
+
+# monsteR
+
+A list of D&D 5e monsters provided through SRD and some functions to fiddle with them.
+
+Data is taken from the json file shared by [u/droiddruid](https://www.reddit.com/r/dndnext/comments/43a09o/srd_monsters_in_json_format/) combined with the human readable files from [open5e](https://github.com/eepMoody/open5e).
+
+## Installation
+
+```r
+devtools::install_github('oganm/monsteR')
+```
+
+## Usage
+
+The package includes a list that include all SRD monsters called `monsters`. Each element of this list is a list that holds monster attributes
+
+```{r}
+ls(monsters$Acolyte)
+
+monsters$Acolyte$actions
+```
+
+Individual monsters have a special print function (`print.monster`). When a monster is called, the text taken from open5e is displayed
+
+```{r}
+monsters$Acolyte
+```
+
+The package includes an `attack` function. This function looks at all available actions of a monster, detects if they have attack rolls and damage dice associated with them, and rolls the dice
+
+```{r}
+attack(monsters$`Bandit Captain`)
+```
+
+If the monster is a spellcaster it will have a `spellcasting` list which lists spell DC, spell attack bonus and spells. Note that spells are `spellList` objects from [wizaRd](https://github.com/oganm/wizaRd) package.
+
+```{r}
+monsters$Acolyte$spellcasting
+
+monsters$Acolyte$spellcasting$spells$`Cure Wounds`
+```
