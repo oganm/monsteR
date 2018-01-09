@@ -1,15 +1,12 @@
+# libraries and variables ----------
+library(jsonlite)
 library(dplyr)
+library(purrr)
 library(ogbox)
 library(stringr)
-library(assertthat)
-library(purrr)
-
-
-system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
-system('mv monsters data-raw/monsters')
-
-# download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json',destfile = "data-raw/monsters.json")
-
+library(wizaRd)
+library(diceSyntax)
+devtools::load_all()
 sizes = c('Tiny',
           'Small',
           'Medium',
@@ -33,7 +30,20 @@ types=c('aberration',
         'monstrosity')
 order = c('chaotic','neutral','lawful','true')
 nice = c('good','neutral','evil')
-other = c('unaligned','any')
+other = c('unaligned','any alignment','neutral','any [a-z\\-]* alignment')
+
+speeds = c('burrow','climb','fly','swim')
+
+
+# read files ------------
+# download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json',destfile = "data-raw/monsters.json")
+# system('svn checkout https://github.com/eepMoody/open5e/trunk/source/monsters')
+# system('mv monsters data-raw/monsters')
+
+monsters = read_json('data-raw/monsters.json')
+monsters = monsters[-length(monsters)]
+
+names(monsters) = monsters %>% purrr::map_chr('name')
 
 speeds = c('burrow','climb','fly','swim')
 
@@ -49,186 +59,144 @@ names(monsterText) = monsterText %>% sapply(function(x){
     # x %>% str_extract('^(?:[^\n]*\n){3}([^\n]*)') %>% str_extract('(?<=\n).*?$')
 })
 
+absentNames = names(monsterText)[!names(monsterText) %in% names(monsters)]
+# names(monsters)[!names(monsters) %in% names(monsterText)]
+
+monsters %<>% lapply(function(x){
+    out = list()
+    print(x$name)
+    if(x$name %in% names(monsterText)){
+        out$text = monsterText[[x$name]]
+        out$name = x$name
+        inMD = TRUE
+    } else{
+        newName = absentNames %>% strsplit(split = '\\s|,\\s')%>%
+            sapply(function(y){
+                all(y %in% (x$name %>% strsplit(split = '\\s|,\\s') %>% {.[[1]]}))
+                }) %>%
+                {absentNames[.]}
+        if(length(newName)==0){
+            out$name = x$name
+            out$text = NULL
+            inMD = FALSE
+        } else{
+            out$name = newName
+            out$text = monsterText[[newName]]
+            inMD = TRUE
+        }
+    }
+    out$size = x$size
+    out$type = x$type
+    out$subtype = x$subtype
+    out$alignment = x$alignment
+    out$AC = x$armor_class
+    out$HP = x$hit_points
+    out$HPdice = x$hit_dice
+    speed = x$speed %>% str_split(', ') %>% {.[[1]]}
+    speedType = speed %>% str_extract(regexMerge(speeds))
+    speed %<>% str_extract('[0-9]+') %>% as.integer()
+    names(speed) = speedType
+    names(speed)[1] ='normal'
+    out$speed = speed
+
+    out$abilityScores = c(x$strength,
+                          x$dexterity,
+                          x$constitution,
+                          x$intelligence,
+                          x$wisdom,
+                          x$charisma)
+    names(out$abilityScores) = c("Str", "Dex", "Con", "Int", "Wis", "Cha")
 
 
-monsterParse = function(text){
-    tryCatch({
-
-    monster = list()
-    monster$text = text
-    monster$name = text %>% str_split('\n') %>% {.[[1]][4]}
-    print(monster$name)
-    typeSizeText = text %>% str_extract('(?<=-\\n).*(?=.*?Armor Class\\*\\*)' %>% regex(dotall=TRUE))
-
-    monster$size = typeSizeText %>%
-        str_extract_all(regexMerge(sizes) %>% regex(dotall=TRUE)) %>%
-        {.[[1]]}
-
-    monster$type = typeSizeText %>% str_extract_all(regexMerge(types))%>% {.[[1]]}
-
-    monster$subtype = text %>%
-        str_extract_all(paste0(regexMerge(types),'.*?(?=Armor Class\\*\\*)') %>%
-                            regex(dotall=TRUE)) %>%
-                            {.[[1]]} %>% str_extract(paste0(
-                                '(?<=',regexMerge(types),'\\s\\()',
-                                '.*?(?=\\))'
-                            )) %>% str_split(', ',simplify = TRUE) %>% as.character()
-    if(length(monster$subtype)==0){
-        monster$subtype = NULL
+    out$saves = out$abilityScores %>% stat2mod()
+    for(y in names(x)[grepl('save',names(x))]){
+        out$saves[which.min(adist(names(out$saves) %>% tolower(),substr(y,1,3)) %>% as.vector())] = x[[y]]
     }
 
-    monster$alignment = text %>% str_extract_all(paste0('(?<=, )','(',paste0(regexMerge(order),' ',regexMerge(nice)),')|(',
-                                                        other,')',
-                                                        '(?=.*?Armor Class\\*\\*)') %>%
-                                                     regex(dotall=TRUE)) %>%
-                                                     {.[[1]]}
 
-    monster$AC = text %>% str_extract_all(paste0("(?<=\\*\\*Armor Class\\*\\*).*(?=\\*\\*Hit Points)") %>% regex(dotall=TRUE)) %>%
-    {.[[1]]} %>% str_extract_all('\\d+') %>% {.[[1]]} %>% as.integer()
+    out$vulnerabilities = x$damage_vulnerabilities
+    out$resistances = x$damage_resistances
+    out$immunities = x$damage_immunities
+    out$conditionImmunities
+    out$senses = x$senses
+    out$languages = x$languages %>% strsplit(', ')
+    out$CR = x$challenge_rating %>% teval
 
-    hpText = text %>% str_extract_all(paste0("(?<=\\*\\*Hit Points\\*\\*).*(?=\\*\\*Speed)") %>% regex(dotall=TRUE)) %>% {.[[1]]}
+    out$specialAbilities = x$special_abilities
+    if(!is.null(out$specialAbilities)){
+        names(out$specialAbilities) = x$special_abilities %>% map_chr('name')
+    }
+    if('Spellcasting' %in% names(out$specialAbilities)){
+        out$spellcasting = list()
+        out$spellcasting$DC = out$specialAbilities$Spellcasting$desc %>% str_extract('(?<=DC )[0-9]+') %>% as.integer()
+        out$spellcasting$attack_bonus =  out$specialAbilities$Spellcasting$desc %>% str_extract('(\\+|-)[0-9]+(?= to hit)') %>% as.integer()
+        spellNames =wizaRd::spells %>% names %>% tolower()
 
-    monster$HPdice = hpText %>% str_extract_all('(?<=\\()[0-9]+?d[0-9]+.*(?=\\))') %>% {.[[1]]}
-    monster$HPmean = hpText %>% str_extract_all('\\d+?(?= \\()') %>% {.[[1]]} %>% as.integer()
+        out$spellcasting$spells =  wizaRd::spells[spellNames %in% (out$specialAbilities$Spellcasting$desc %>% strsplit('(, )|(: )') %>% {.[[1]]})]
 
-
-    class(monster) = append(class(monster), 'monster')
-    return(monster)
-    },
-    error = function(e){
-        monster = list()
-        monster$name = text %>% str_split('\n') %>% {.[[1]][4]}
-        monster$text = text
-        class(monster) = append(class(monster), 'monsterNoParse')
-        return(monster)
-    })
-
-}
-
-monsters = monsterText %>% lapply(monsterParse)
-monsters %>% map('type')
-monsters[(monsters %>% lapply(class) %>% purrr::map(2)  %>% unlist) %in% 'monsterNoParse']
-
-monsters %>% map('size')
+    }
 
 
-monsterParse = function(text){
-    tryCatch({
-        monster = list()
-        textBackup = text
-        text = textBackup
-        monster$text = text
-        monster$name = text[4]
-        # name is extracted top is not needed
-        text = text[-(1:6)]
-        # remove empty lines and possible lines for figures
-        # text = text[!grepl('^$',text)]
-        text = text[!grepl(ogbox::regexMerge(c('figure::',
-                                               ':figclass:',
-                                               ':target:',
-                                               '©',
-                                               'rst-class')),text)]
+    out$actions = x$actions
+    if(!is.null(out$actions)){
+        names(out$actions) = x$actions %>% map_chr('name')
+    }
 
+    out$legendaryActions= x$legendary_actions
+    if(!is.null(out$legendaryActions)){
+        names(out$legendaryActions) = x$legendary_actions %>% map_chr('name')
+    }
 
+    # if in MD, overwrite bits of it -------------
+    # some bits of the JSON file is wrong/missing. Get the easily parsed bits from MD file
 
-        # size and type infor is now the first line, take it
-        monster$size = str_extract_all(text[1],regexMerge(sizes)) %>% {.[[1]]}
-        text[1] = str_replace_all(text[1],regexMerge(sizes),'')
-        monster$type = text[1] %>% str_extract_all(regexMerge(types)) %>% {.[[1]]}
-        monster$subtype = text[1]%>% str_extract_all('(?<=\\()[a-zA-Z\\s]*?(?=\\))') %>% {.[[1]]}
-        text[1] = str_replace_all(text[1],'(?<=\\()[a-zA-Z\\s]*?(?=\\))','')
+    if(inMD){
+        text = monsterText[[out$name]]
+        typeSizeText = text %>% str_extract('(?<=-\\n).*(?=.*?Armor Class\\*\\*)' %>% regex(dotall=TRUE))
 
-        monster$alignment = text[1] %>%str_extract_all(
-            paste0('(',regexMerge(order),'\\s',regexMerge(nice),')|(',
-                   regexMerge(other),')')) %>% {.[[1]]}
-            #str_extract('(?<!,)\\s*([^,]+)$') %>% str_trim()
-        text = text[-(1:2)]
+        out$size = typeSizeText %>%
+            str_extract_all(regexMerge(sizes) %>% regex(dotall=TRUE)) %>%
+            {.[[1]]}
 
-        # function to get data from an entire section
-        sectionLines = function(pattern){
-            if(pattern == 'statblock'){
-                return((grep(pattern = '\\| STR',text)-1):(grep(pattern = '\\| STR',text)+3))
-            } else if(pattern =='Actions'){
-                initial = grep(pattern = '^Actions',text)+3
-                end = grep('^Legendary Actions',text)-1
-                if(length(end)==0){
-                    end = grep('^$',text)[grep('^$',text)>initial]
-                    end = end[!(end+1) %in% grep('^\\*\\*',text)] - 1
-                    if(length(end)==0){
-                        end = length(text)
-                    }
-                }
-                return(initial:end)
-            } else if(pattern = '^Legendary Actions'){
-                initial = grep(pattern = 'Legendary Actions',text)+3
-                end = grep('^$',text)[grep('^$',text)>initial]
-                end = end[!(end+1) %in% grep('^\\*\\*',text)] - 1
-                if(length(end)==0){
-                    end = length(text)
-                }
-                return(initial:end)
-            } else{
-                initial = grep(pattern = pattern,text)
-                textTemp = text[(initial+1):length(text)]
-                end = grep(pattern = ogbox::regexMerge(c('^$','^\\*\\*','^\\+','Actions','Legendary Actions')),textTemp)[1]
-                initial:(initial+end-1)
-            }
+        out$type = typeSizeText %>% str_extract_all(regexMerge(types))%>% {.[[1]]}
+
+        out$subtype = text %>%
+            str_extract_all(paste0(regexMerge(types),'.*?(?=Armor Class\\*\\*)') %>%
+                                regex(dotall=TRUE)) %>%
+                                {.[[1]]} %>% str_extract(paste0(
+                                    '(?<=',regexMerge(types),'\\s\\()',
+                                    '.*?(?=\\))'
+                                )) %>% str_split(', ',simplify = TRUE) %>% as.character()
+        if(length(out$subtype)==0){
+            out$subtype = ''
         }
 
-        ACtext = text[sectionLines('*Armor Class')] %>% paste(collapse=' ')
-        monster$armor$AC = ACtext %>% str_extract_all('[0-9]+') %>% {.[[1]]} %>% as.numeric
-        assert_that(noNA(monster$armor$AC))
+        out$alignment = text %>% str_extract_all(paste0('(?<=, )','(',paste0(regexMerge(order),' ',regexMerge(nice)),')|(',
+                                                            regexMerge(other),')',
+                                                            '(?=.*?Armor Class\\*\\*)') %>%
+                                                         regex(dotall=TRUE)) %>%
+                                                         {.[[1]]}
 
-        monster$armor$AC = text[grep(pattern = 'Armor Class',text)] %>% str_extract_all('[0-9]+') %>% {.[[1]]} %>% as.numeric
-        assert_that(noNA(monster$armor$AC))
-        monster$armor$armor = text[grep(pattern = 'Armor Class',text)] %>% str_extract('(\\s|[A-Za-z])*?(?=\\))')
+        out$AC = text %>% str_extract_all(paste0("(?<=\\*\\*Armor Class\\*\\*).*(?=\\*\\*Hit Points)") %>% regex(dotall=TRUE)) %>%
+        {.[[1]]} %>% str_extract_all('\\d+') %>% {.[[1]]} %>% as.integer()
 
-        monster$HP$average = text[grep(pattern = 'Hit Points',text)] %>% str_extract('[0-9]+') %>% as.numeric
-        assert_that(noNA(monster$HP$average))
+        hpText = text %>% str_extract_all(paste0("(?<=\\*\\*Hit Points\\*\\*).*(?=\\*\\*Speed)") %>% regex(dotall=TRUE)) %>% {.[[1]]}
 
-        monster$HP$roll =  text[grep(pattern = 'Hit Points',text)] %>%  str_extract('(?<=\\().*(?=\\))')
-
-        speedStrings = c('\\*','fly','burrow','climb','swim')
-
-        monster$speed =
-            speedStrings %>% lapply(function(x){
-                text[grep(pattern = 'Speed',text)] %>% str_extract(paste0("(?<=",x,'\\s)[0-9]*')) %>% as.numeric
-            })
-        names(monster$speed) = c('normal','fly','burrow','climb','swim')
-
-        monster$stats = text[grep(pattern = '\\| STR',text)+2] %>% str_extract_all('(?<=\\|\\s)[0-9]*') %>% {.[[1]]} %>% as.numeric %>%
-        {names(.) = c('STR','DEX','CON','INT','WIS','CHA')
-        .} %>% as.list
-
-        monster$languages = text[grep(pattern = 'Languages',text)] %>% str_replace('\\*\\*Languages\\*\\*\\s','') %>%
-            strsplit(',') %>% {.[[1]]}
+        out$HPdice = hpText %>% str_extract_all('(?<=\\()[0-9]+?d[0-9]+.*(?=\\))') %>% {.[[1]]}
+        out$HP = hpText %>% str_extract_all('\\d+?(?= \\()') %>% {.[[1]]} %>% as.integer()
+    } else{
+        # HP dice is always wrong. fix it regardless
+        parsedDice = out$HPdice %>% diceParser()
+        out$HPdice = paste(out$HPdice,'+',ceiling(out$HP - parsedDice$diceCount*(parsedDice$diceSide/2+.5)))
+        if (out$subtype == ''){
+            out$subtype = NA
+        }
+    }
 
 
+    class(out) = append(class(out), 'monster')
+    return(out)
 
-        class(monster) = append(class(monster), 'monster')
-        return(monster)
-    },error = function(e){
-        monster = list()
-        monster$text = text
-        class(monster) = append(class(monster), 'monsterNoParse')
-        return(monster)
-    })
-}
-monsterParse2 = function(text){
-    tryCatch({
-        monster = list()
-        monster$text = text
-        monster$name = text[4]
-
-
-        class(monster) = append(class(monster), 'monster')
-        return(monster)
-    },error = function(e){
-        monster = list()
-        monster$text = text
-        class(monster) = append(class(monster), 'monsterNoParse')
-        return(monster)
-    })
-}
-monsters = monsterText %>% lapply(monsterParse)
-monsters[(monsters %>% lapply(class) %>% purrr::map(2)  %>% unlist) %in% 'monsterNoParse']
+})
+class(monsters) = append(class(monsters),'monsterList')
+use_data(monsters,overwrite = TRUE)
