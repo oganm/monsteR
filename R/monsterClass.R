@@ -56,6 +56,25 @@ attack = function(monster,attacks = 'all', vocal = FALSE){
 }
 
 
+swarmAttack = function(monster, attacks = 'all', count, AC, advantage = c('N','D','A'), vocal = FALSE){
+    advantage = match.arg(advantage)
+    if(attacks == 'all'){
+        attacks = names(monster$actions)
+    } else{
+        attacks = names(monster$actions)[names(monster$actions) %in% attacks]
+    }
+    attacks = attacks[attacks %in% attackable(monster$actions)]
+
+    monster$actions[attacks] %>% lapply(function(x){
+        diceSyntax::swarm(AC = AC,
+                          count = count,
+                          damageDice = x$damage_dice,
+                          attackBonus = x$attack_bonus,
+                          damageBonus = x$damage_bonus,
+                          advantage = advantage) %>% sum
+    })
+}
+
 singleAttack = function(action,vocal = FALSE){
     if(is.null(action$attack_bonus)){
         action$attack_bonus = 0
