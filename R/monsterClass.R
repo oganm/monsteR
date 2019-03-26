@@ -83,12 +83,12 @@ singleAttack = function(action,vocal = FALSE){
         action$damage_bonus = 0
     }
 
-    attack = diceSyntax::roll('1d20',vocal = vocal)
-    attack = attack +  action$attack_bonus
+    roll = diceSyntax::roll('1d20',vocal = vocal)
+    attack = roll +  action$attack_bonus
     damage = diceSyntax::roll(action$damage_dice,vocal = vocal) + action$damage_bonus
-    if(attack == 20){
+    if(roll == 20){
         damage = damage + diceSyntax::roll(action$damage_dice,vocal = vocal)
-    } else if (attack == 1){
+    } else if (roll == 1){
         damage = 0
     }
 
