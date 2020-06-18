@@ -6,6 +6,8 @@ library(ogbox)
 library(stringr)
 library(wizaRd)
 library(diceSyntax)
+library(snakecase)
+
 devtools::load_all()
 sizes = c('Tiny',
           'Small',
@@ -34,6 +36,30 @@ other = c('unaligned','any alignment','neutral','any [a-z\\-]* alignment')
 
 speeds = c('burrow','climb','fly','swim')
 
+skillNames = c('Athletics',
+               'Acrobatics',
+               'Sleight of Hand',
+               'Stealth',
+               'Arcana',
+               'History',
+               'Investigation',
+               'Nature',
+               'Religion',
+               'Animal Handling',
+               'Insight',
+               'Medicine',
+               'Perception',
+               'Survival',
+               'Deception',
+               'Intimidation',
+               'Performance',
+               'Persuasion')
+
+skillAttributes = c('Str',
+                    rep('Dex',3),
+                    rep('Int',5),
+                    rep('Wis',5),
+                    rep('Cha',4))
 
 # read files ------------
 # download.file('https://dl.dropboxusercontent.com/s/iwz112i0bxp2n4a/5e-SRD-Monsters.json',destfile = "data-raw/monsters.json")
@@ -44,8 +70,6 @@ monsters = read_json('data-raw/monsters.json')
 monsters = monsters[-length(monsters)]
 
 names(monsters) = monsters %>% purrr::map_chr('name')
-
-speeds = c('burrow','climb','fly','swim')
 
 
 root = list.files('data-raw/monsters/',full.names = TRUE)
@@ -192,6 +216,14 @@ monsters %<>% lapply(function(x){
             out$subtype = NA
         }
     }
+
+    out$skills = rep(0, length(skillNames))
+    out$skills = stat2mod(out$abilityScores)[skillAttributes]
+    names(out$skills) = skillNames
+
+
+    out$skills[to_title_case(names(x)[names(x) %in% tolower(skillNames)])] =
+        x[names(x)[names(x) %in% tolower(skillNames)]] %>% unlist %>% unname
 
 
     class(out) = append(class(out), 'monster')
