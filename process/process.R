@@ -231,4 +231,6 @@ monsters %<>% lapply(function(x){
 
 })
 class(monsters) = append(class(monsters),'monsterList')
+
+cat(jsonlite::toJSON(monsters),file = 'data-raw/processed.json')
 use_data(monsters,overwrite = TRUE)
